@@ -1,0 +1,6 @@
+sources:
+  - "/Users/vadimpyx/dev/rv32i_interp/test/test.c"
+executable_segment: 0x8000
+data_segment: 0x0
+initial_registers:
+  x1: 0x4000
