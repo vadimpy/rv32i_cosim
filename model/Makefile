@@ -11,7 +11,7 @@ build:
 		--exe --build  --public ${sim} ${emu}/emu.cpp ${top}
 
 $(tests):
-	$(vtop) $(test_path) / $@
+	$(vtop) $(test_path)/$@ > /dev/null
 
 test: $(tests)
 	$(tests)
