@@ -11,7 +11,7 @@ build:
 		--exe --build  --public ${sim} ${emu}/emu.cpp ${top}
 
 $(tests):
-	$(vtop) $(test_path)/$@ > /dev/null
+	@echo Run $@ test
+	@$(vtop) $(test_path)/$@  > /dev/null 2>&1 && echo OK || echo FAIL
 
 test: $(tests)
-	$(tests)
