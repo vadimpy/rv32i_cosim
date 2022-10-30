@@ -1,4 +1,5 @@
 #include <verilated.h>
+#include <iomanip>
 
 #include "tools/common.hpp"
 #include "vmodule.hpp"
