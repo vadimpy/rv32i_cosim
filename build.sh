@@ -1,0 +1,14 @@
+cd model
+export include_path=include
+export regfile=modules/regfile
+export ram=modules/ram
+export fetch=modules/fetch
+export decoder=modules/decoder
+export exec=modules/exec
+export mem=modules/mem
+export writeback=modules/writeback
+export top=modules/top/top.v
+export sim=/app/rv32i_cosim/sim/sim.cpp
+export cpp_include=/app/rv32i_cosim/include
+export emu=/app/rv32i_cosim/emu
+make build
