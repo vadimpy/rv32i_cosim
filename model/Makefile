@@ -9,3 +9,9 @@ build:
 		-I${mem} \
 		-I${writeback} \
 		--exe --build  --public ${sim} ${emu}/emu.cpp ${top}
+
+$(tests):
+	$(vtop) $(test_path) / $@
+
+test: $(tests)
+	$(tests)
