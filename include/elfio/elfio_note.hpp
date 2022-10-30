@@ -43,7 +43,7 @@ class note_section_accessor_template
 {
   public:
     //------------------------------------------------------------------------------
-    note_section_accessor_template( const elfio& elf_file, S* section )
+    explicit note_section_accessor_template( const elfio& elf_file, S* section )
         : elf_file( elf_file ), notes( section )
     {
         process_section();
@@ -59,7 +59,7 @@ class note_section_accessor_template
     bool get_note( Elf_Word     index,
                    Elf_Word&    type,
                    std::string& name,
-                   void*&       desc,
+                   char*&       desc,
                    Elf_Word&    descSize ) const
     {
         if ( index >= ( notes->*F_get_size )() ) {
@@ -96,7 +96,7 @@ class note_section_accessor_template
     //------------------------------------------------------------------------------
     void add_note( Elf_Word           type,
                    const std::string& name,
-                   const void*        desc,
+                   const char*        desc,
                    Elf_Word           descSize )
     {
         const endianess_convertor& convertor = elf_file.get_convertor();
@@ -117,7 +117,7 @@ class note_section_accessor_template
             buffer.append( pad, (size_t)align - nameLen % align );
         }
         if ( desc != nullptr && descSize != 0 ) {
-            buffer.append( reinterpret_cast<const char*>( desc ), descSize );
+            buffer.append( desc, descSize );
             if ( descSize % align != 0 ) {
                 buffer.append( pad, (size_t)align - descSize % align );
             }
@@ -145,14 +145,21 @@ class note_section_accessor_template
 
         Elf_Word align = sizeof( Elf_Word );
         while ( current + (Elf_Xword)3 * align <= size ) {
-            note_start_positions.emplace_back( current );
             Elf_Word namesz = convertor( *(const Elf_Word*)( data + current ) );
             Elf_Word descsz = convertor(
                 *(const Elf_Word*)( data + current + sizeof( namesz ) ) );
+            Elf_Word advance =
+                (Elf_Xword)3 * sizeof( Elf_Word ) +
+                ( ( namesz + align - 1 ) / align ) * (Elf_Xword)align +
+                ( ( descsz + align - 1 ) / align ) * (Elf_Xword)align;
+            if ( namesz < size && descsz < size && current + advance <= size ) {
+                note_start_positions.emplace_back( current );
+            }
+            else {
+                break;
+            }
 
-            current += (Elf_Xword)3 * sizeof( Elf_Word ) +
-                       ( ( namesz + align - 1 ) / align ) * (Elf_Xword)align +
-                       ( ( descsz + align - 1 ) / align ) * (Elf_Xword)align;
+            current += advance;
         }
     }
 

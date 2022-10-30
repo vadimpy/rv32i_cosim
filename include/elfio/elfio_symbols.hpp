@@ -30,11 +30,10 @@ template <class S> class symbol_section_accessor_template
 {
   public:
     //------------------------------------------------------------------------------
-    symbol_section_accessor_template( const elfio& elf_file, S* symbol_section )
+    explicit symbol_section_accessor_template( const elfio& elf_file,
+                                               S*           symbol_section )
         : elf_file( elf_file ), symbol_section( symbol_section )
     {
-        hash_section       = nullptr;
-        hash_section_index = 0;
         find_hash_section();
     }
 
@@ -42,7 +41,20 @@ template <class S> class symbol_section_accessor_template
     Elf_Xword get_symbols_num() const
     {
         Elf_Xword nRet = 0;
-        if ( 0 != symbol_section->get_entry_size() &&
+
+        size_t minimum_symbol_size;
+        switch ( elf_file.get_class() ) {
+        case ELFCLASS32:
+            minimum_symbol_size = sizeof( Elf32_Sym );
+            break;
+        case ELFCLASS64:
+            minimum_symbol_size = sizeof( Elf64_Sym );
+            break;
+        default:
+            return nRet;
+        }
+
+        if ( symbol_section->get_entry_size() >= minimum_symbol_size &&
              symbol_section->get_size() <= symbol_section->get_stream_size() ) {
             nRet =
                 symbol_section->get_size() / symbol_section->get_entry_size();
@@ -343,34 +355,36 @@ template <class S> class symbol_section_accessor_template
             ( (T)1 << ( hash % ( 8 * sizeof( T ) ) ) ) |
             ( (T)1 << ( ( hash >> bloom_shift ) % ( 8 * sizeof( T ) ) ) );
 
-        if ( ( convertor( bloom_filter[bloom_index] ) & bloom_bits ) ==
-             bloom_bits ) {
-            uint32_t bucket = hash % nbuckets;
-            auto*    buckets =
-                (uint32_t*)( hash_section->get_data() + 4 * sizeof( uint32_t ) +
-                             bloom_size * sizeof( T ) );
-            auto* chains =
-                (uint32_t*)( hash_section->get_data() + 4 * sizeof( uint32_t ) +
-                             bloom_size * sizeof( T ) +
-                             nbuckets * sizeof( uint32_t ) );
+        if ( ( convertor( bloom_filter[bloom_index] ) & bloom_bits ) !=
+             bloom_bits )
+            return ret;
 
-            if ( convertor( buckets[bucket] ) >= symoffset ) {
-                uint32_t chain_index = convertor( buckets[bucket] ) - symoffset;
-                uint32_t chain_hash  = convertor( chains[chain_index] );
-                std::string symname;
-                while ( true ) {
-                    if ( ( chain_hash >> 1 ) == ( hash >> 1 ) &&
-                         get_symbol( chain_index + symoffset, symname, value,
-                                     size, bind, type, section_index, other ) &&
-                         name == symname ) {
-                        ret = true;
-                        break;
-                    }
+        uint32_t bucket = hash % nbuckets;
+        auto*    buckets =
+            (uint32_t*)( hash_section->get_data() + 4 * sizeof( uint32_t ) +
+                         bloom_size * sizeof( T ) );
+        auto* chains =
+            (uint32_t*)( hash_section->get_data() + 4 * sizeof( uint32_t ) +
+                         bloom_size * sizeof( T ) +
+                         nbuckets * sizeof( uint32_t ) );
 
-                    if ( chain_hash & 1 )
-                        break;
-                    chain_hash = convertor( chains[++chain_index] );
+        if ( convertor( buckets[bucket] ) >= symoffset ) {
+            uint32_t    chain_index = convertor( buckets[bucket] ) - symoffset;
+            uint32_t    chain_hash  = convertor( chains[chain_index] );
+            std::string symname;
+
+            while ( true ) {
+                if ( ( chain_hash >> 1 ) == ( hash >> 1 ) &&
+                     get_symbol( chain_index + symoffset, symname, value, size,
+                                 bind, type, section_index, other ) &&
+                     name == symname ) {
+                    ret = true;
+                    break;
                 }
+
+                if ( chain_hash & 1 )
+                    break;
+                chain_hash = convertor( chains[++chain_index] );
             }
         }
 
@@ -528,8 +542,6 @@ template <class S> class symbol_section_accessor_template
             }
         }
 
-        // Elf_Word nRet = symbol_section->get_size() / sizeof(entry) - 1;
-
         return first_not_local;
     }
 
@@ -537,8 +549,8 @@ template <class S> class symbol_section_accessor_template
   private:
     const elfio&   elf_file;
     S*             symbol_section;
-    Elf_Half       hash_section_index;
-    const section* hash_section;
+    Elf_Half       hash_section_index{ 0 };
+    const section* hash_section{ nullptr };
 };
 
 using symbol_section_accessor = symbol_section_accessor_template<section>;

@@ -7,12 +7,12 @@ exec=modules/exec
 mem=modules/mem
 writeback=modules/writeback
 top=modules/top/top.v
-sim=../sim/sim.cpp
-cpp_include=/Users/vadimpyx/dev/rv32i_interp/include
-emu=/Users/vadimpyx/dev/rv32i_interp/emu
+sim=/app/rv32i_cosim/sim/sim.cpp
+cpp_include=/app/rv32i_cosim/include
+emu=/app/rv32i_cosim/emu
 
 build:
-	@verilator -CFLAGS '-I${cpp_include} -I${emu}' -cc -Mdir cpp_model \
+	@verilator -CFLAGS '-std=c++14 -I${cpp_include} -I${emu}' -cc -Mdir cpp_model \
 		-I${include_path} \
 		-I${ram} \
 		-I${regfile} \

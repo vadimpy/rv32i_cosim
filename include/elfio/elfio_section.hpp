@@ -50,19 +50,19 @@ class section
     ELFIO_GET_SET_ACCESS_DECL( Elf_Word, name_string_offset );
     ELFIO_GET_ACCESS_DECL( Elf64_Off, offset );
 
-    virtual const char* get_data() const                                = 0;
-    virtual void        set_data( const char* pData, Elf_Word size )    = 0;
-    virtual void        set_data( const std::string& data )             = 0;
-    virtual void        append_data( const char* pData, Elf_Word size ) = 0;
-    virtual void        append_data( const std::string& data )          = 0;
-    virtual size_t      get_stream_size() const                         = 0;
-    virtual void        set_stream_size( size_t value )                 = 0;
+    virtual const char* get_data() const                                   = 0;
+    virtual void        set_data( const char* raw_data, Elf_Word size )    = 0;
+    virtual void        set_data( const std::string& data )                = 0;
+    virtual void        append_data( const char* raw_data, Elf_Word size ) = 0;
+    virtual void        append_data( const std::string& data )             = 0;
+    virtual size_t      get_stream_size() const                            = 0;
+    virtual void        set_stream_size( size_t value )                    = 0;
 
   protected:
     ELFIO_SET_ACCESS_DECL( Elf64_Off, offset );
     ELFIO_SET_ACCESS_DECL( Elf_Half, index );
 
-    virtual void load( std::istream& stream, std::streampos header_offset ) = 0;
+    virtual bool load( std::istream& stream, std::streampos header_offset ) = 0;
     virtual void save( std::ostream&  stream,
                        std::streampos header_offset,
                        std::streampos data_offset )                         = 0;
@@ -77,17 +77,7 @@ template <class T> class section_impl : public section
                   const address_translator*  translator )
         : convertor( convertor ), translator( translator )
     {
-        std::fill_n( reinterpret_cast<char*>( &header ), sizeof( header ),
-                     '\0' );
-        is_address_set = false;
-        data           = nullptr;
-        data_size      = 0;
-        index          = 0;
-        stream_size    = 0;
     }
-
-    //------------------------------------------------------------------------------
-    ~section_impl() override { delete[] data; }
 
     //------------------------------------------------------------------------------
     // Section info functions
@@ -108,7 +98,7 @@ template <class T> class section_impl : public section
     std::string get_name() const override { return name; }
 
     //------------------------------------------------------------------------------
-    void set_name( std::string name ) override { this->name = name; }
+    void set_name( std::string name_prm ) override { this->name = name_prm; }
 
     //------------------------------------------------------------------------------
     void set_address( Elf64_Addr value ) override
@@ -122,17 +112,16 @@ template <class T> class section_impl : public section
     bool is_address_initialized() const override { return is_address_set; }
 
     //------------------------------------------------------------------------------
-    const char* get_data() const override { return data; }
+    const char* get_data() const override { return data.get(); }
 
     //------------------------------------------------------------------------------
     void set_data( const char* raw_data, Elf_Word size ) override
     {
         if ( get_type() != SHT_NOBITS ) {
-            delete[] data;
-            data = new ( std::nothrow ) char[size];
-            if ( nullptr != data && nullptr != raw_data ) {
+            data = std::unique_ptr<char[]>( new ( std::nothrow ) char[size] );
+            if ( nullptr != data.get() && nullptr != raw_data ) {
                 data_size = size;
-                std::copy( raw_data, raw_data + size, data );
+                std::copy( raw_data, raw_data + size, data.get() );
             }
             else {
                 data_size = 0;
@@ -156,18 +145,19 @@ template <class T> class section_impl : public section
     {
         if ( get_type() != SHT_NOBITS ) {
             if ( get_size() + size < data_size ) {
-                std::copy( raw_data, raw_data + size, data + get_size() );
+                std::copy( raw_data, raw_data + size, data.get() + get_size() );
             }
             else {
-                data_size      = 2 * ( data_size + size );
-                char* new_data = new ( std::nothrow ) char[data_size];
+                data_size = 2 * ( data_size + size );
+                std::unique_ptr<char[]> new_data(
+                    new ( std::nothrow ) char[data_size] );
 
                 if ( nullptr != new_data ) {
-                    std::copy( data, data + get_size(), new_data );
+                    std::copy( data.get(), data.get() + get_size(),
+                               new_data.get() );
                     std::copy( raw_data, raw_data + size,
-                               new_data + get_size() );
-                    delete[] data;
-                    data = new_data;
+                               new_data.get() + get_size() );
+                    data = std::move( new_data );
                 }
                 else {
                     size = 0;
@@ -201,13 +191,12 @@ template <class T> class section_impl : public section
     void set_index( Elf_Half value ) override { index = value; }
 
     //------------------------------------------------------------------------------
-    void load( std::istream& stream, std::streampos header_offset ) override
+    bool load( std::istream& stream, std::streampos header_offset ) override
     {
-        std::fill_n( reinterpret_cast<char*>( &header ), sizeof( header ),
-                     '\0' );
+        header = { 0 };
 
         if ( translator->empty() ) {
-            stream.seekg( 0, stream.end );
+            stream.seekg( 0, std::istream::end );
             set_stream_size( size_t( stream.tellg() ) );
         }
         else {
@@ -220,19 +209,26 @@ template <class T> class section_impl : public section
         Elf_Xword size = get_size();
         if ( nullptr == data && SHT_NULL != get_type() &&
              SHT_NOBITS != get_type() && size < get_stream_size() ) {
-            data = new ( std::nothrow ) char[size_t( size ) + 1];
+            data.reset( new ( std::nothrow ) char[size_t( size ) + 1] );
 
             if ( ( 0 != size ) && ( nullptr != data ) ) {
                 stream.seekg(
                     ( *translator )[( *convertor )( header.sh_offset )] );
-                stream.read( data, size );
-                data[size] = 0; // Ensure data is ended with 0 to avoid oob read
-                data_size  = decltype( data_size )( size );
+                stream.read( data.get(), size );
+                if ( static_cast<Elf_Xword>( stream.gcount() ) != size ) {
+                    data = nullptr;
+                    return false;
+                }
+                data.get()[size] =
+                    0; // Ensure data is ended with 0 to avoid oob read
+                data_size = decltype( data_size )( size );
             }
             else {
                 data_size = 0;
             }
         }
+
+        return true;
     }
 
     //------------------------------------------------------------------------------
@@ -271,15 +267,15 @@ template <class T> class section_impl : public section
 
     //------------------------------------------------------------------------------
   private:
-    T                          header;
-    Elf_Half                   index;
+    T                          header = { 0 };
+    Elf_Half                   index  = 0;
     std::string                name;
-    char*                      data;
-    Elf_Word                   data_size;
-    const endianess_convertor* convertor;
-    const address_translator*  translator;
-    bool                       is_address_set;
-    size_t                     stream_size;
+    std::unique_ptr<char[]>    data;
+    Elf_Word                   data_size      = 0;
+    const endianess_convertor* convertor      = nullptr;
+    const address_translator*  translator     = nullptr;
+    bool                       is_address_set = false;
+    size_t                     stream_size    = 0;
 };
 
 } // namespace ELFIO

@@ -32,7 +32,8 @@ template <class S> class dynamic_section_accessor_template
 {
   public:
     //------------------------------------------------------------------------------
-    dynamic_section_accessor_template( const elfio& elf_file, S* section )
+    explicit dynamic_section_accessor_template( const elfio& elf_file,
+                                                S*           section )
         : elf_file( elf_file ), dynamic_section( section ), entries_num( 0 )
     {
     }
@@ -40,13 +41,22 @@ template <class S> class dynamic_section_accessor_template
     //------------------------------------------------------------------------------
     Elf_Xword get_entries_num() const
     {
+        size_t needed_entry_size = -1;
+        if ( elf_file.get_class() == ELFCLASS32 ) {
+            needed_entry_size = sizeof( Elf32_Dyn );
+        }
+        else {
+            needed_entry_size = sizeof( Elf64_Dyn );
+        }
+
         if ( ( 0 == entries_num ) &&
-             ( 0 != dynamic_section->get_entry_size() ) ) {
+             ( 0 != dynamic_section->get_entry_size() &&
+               dynamic_section->get_entry_size() >= needed_entry_size ) ) {
             entries_num =
                 dynamic_section->get_size() / dynamic_section->get_entry_size();
             Elf_Xword   i;
-            Elf_Xword   tag;
-            Elf_Xword   value;
+            Elf_Xword   tag   = DT_NULL;
+            Elf_Xword   value = 0;
             std::string str;
             for ( i = 0; i < entries_num; i++ ) {
                 get_entry( i, tag, value, str );
@@ -134,7 +144,8 @@ template <class S> class dynamic_section_accessor_template
         // Check unusual case when dynamic section has no data
         if ( dynamic_section->get_data() == nullptr ||
              ( index + 1 ) * dynamic_section->get_entry_size() >
-                 dynamic_section->get_size() ) {
+                 dynamic_section->get_size() ||
+             dynamic_section->get_entry_size() < sizeof( T ) ) {
             tag   = DT_NULL;
             value = 0;
             return;
