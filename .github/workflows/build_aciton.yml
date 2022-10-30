@@ -4,5 +4,6 @@ jobs:
   InstallDepsAndBuild:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v3
       - run: ./prereqs.sh
       - run: ./build.sh
