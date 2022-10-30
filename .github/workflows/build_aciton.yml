@@ -1,0 +1,8 @@
+name: Build Action
+on: [push]
+jobs:
+  InstallDepsAndBuild:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./prereqs.sh
+      - run: ./build.sh
