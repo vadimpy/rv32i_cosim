@@ -121,7 +121,7 @@ int main(int argc, char* argv[]) {
     // }
 
     while (true) {
-        std::cin.get();
+        // std::cin.get();
         std::cout << "model clocks: " << model.ticks() / 2 << "\temu steps: " << cpu_emu.steps() << '\n';
         Result val_res = state_validator.compare(model_state);
         std::cout << "Emu pc " << HEX(cpu_emu.pc() * 4) << '\n';
@@ -159,7 +159,7 @@ int main(int argc, char* argv[]) {
         case HARD_FAIL:
             std::cerr << "HARD FAIL\n";
             std::cout << "------------\n\n";
-            return 0;
+            return -1;
         }
     }
 
