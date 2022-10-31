@@ -5,6 +5,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - run: sudo apt install perl python3 cmake make autoconf g++ flex bison ccache flex-dev
+      - run: sudo apt install perl python3 cmake make autoconf g++ flex bison ccache
       - run: ./prereqs.sh
       - run: ./build.sh
