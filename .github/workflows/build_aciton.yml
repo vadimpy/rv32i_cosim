@@ -1,9 +1,10 @@
 name: Build Action
-on: [push]
+on: push
 jobs:
   InstallDepsAndBuild:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      - run: apt get install perl python3 cmake make autoconf g++ flex bison ccache flex-dev
       - run: ./prereqs.sh
       - run: ./build.sh
